@@ -33,7 +33,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # --- CONNEXION SUPABASE ---
-SUPABASE_URL = "https://pttlfcwuqjyverbsvzzb.supabase.co"
+SUPABASE_URL = "https://pttlfcwogdyvrbvvzzb.supabase.co"
 SUPABASE_KEY = "sb_publishable_VjrsGDL0MB5J6OmqLQAq_QbgJir"
 
 @st.cache_resource
