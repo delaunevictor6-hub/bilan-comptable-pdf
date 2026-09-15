@@ -14,10 +14,9 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# --- DESIGN & STYLE CUSTOM CSS ---
+# --- STYLE CSS ---
 st.markdown("""
 <style>
-    /* Style global et couleurs */
     .main { background-color: #F8FAFC; }
     .stButton>button {
         background-color: #2563EB;
@@ -29,20 +28,12 @@ st.markdown("""
         width: 100%;
     }
     .stButton>button:hover { background-color: #1D4ED8; color: white; }
-    .metric-card {
-        background-color: white;
-        padding: 1.2rem;
-        border-radius: 10px;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-        border: 1px solid #E2E8F0;
-    }
 </style>
-""", unsafe_allow_allowed=True)
+""", unsafe_allow_html=True)
 
 # --- NAVIGATION SIDEBAR ---
 with st.sidebar:
-    st.image("https://img.icons8.com/color/96/accounting.png", width=60)
-    st.title("ComptaPro AI")
+    st.title("⚡ ComptaPro AI")
     st.caption("Cabinet : **FiduConseil Expertise**")
     st.divider()
 
@@ -54,8 +45,8 @@ with st.sidebar:
     st.divider()
     st.info("💡 **Analyse IA active** : Importez une balance ou un FEC au format CSV pour pré-remplir les données.")
 
-# --- INITIALIZATION DES SESSION STATES ---
-if "historique" not in st.session_states:
+# --- DONNÉES EN SESSIONS ---
+if "historique" not in st.session_state:
     st.session_state["historique"] = [
         {
             "id": "CLI-2026-01",
@@ -75,36 +66,27 @@ if "historique" not in st.session_states:
         }
     ]
 
-# ==============================================================================
-# PAGE 1 : DASHBOARD & ANALYTICS
-# ==============================================================================
+# --- PAGES DE L'APPLICATION ---
 if menu == "Dashboard & Analytics":
     st.title("📈 Tableau de Bord du Cabinet")
-    st.write("Aperçu de la santé financière des clients gérés.")
-
     col1, col2, col3, col4 = st.columns(4)
     col1.metric("Bilans Générés", len(st.session_state["historique"]))
     col2.metric("Chiffre d'Affaires Cumulé", "860 000 €", "+12%")
     col3.metric("Taux de Rentabilité Moyen", "14.2 %")
-    col4.metric("Dossiers en Attente", "3", delta_color="normal")
+    col4.metric("Dossiers en Attente", "3")
 
     st.divider()
     st.subheader("Derniers bilans clients édités")
     df_hist = pd.DataFrame(st.session_state["historique"])
     st.dataframe(df_hist, use_container_width=True)
 
-# ==============================================================================
-# PAGE 2 : NOUTEAU BILAN CLIENT (FORMULAIRE + PARSER + PDF)
-# ==============================================================================
 elif menu == "Nouveau Bilan Client":
     st.title("📄 Édition d'un Bilan Comptable Client")
-    st.caption("Importez vos données comptables ou renseignez le formulaire.")
-
-    # Section Import Automatique (FEC / CSV)
-    with st.expander("📥 **Option 1 : Importer une Balance Comptable / FEC (CSV)**", expanded=False):
+    
+    with st.expander("📥 Option 1 : Importer une Balance Comptable / FEC (CSV)", expanded=False):
         uploaded_file = st.file_uploader("Glissez-déposez le fichier de balance comptable (CSV/Excel)", type=["csv", "xlsx"])
         if uploaded_file is not None:
-            st.success("Fichier analysé avec succès par le module OCR/Comptable !")
+            st.success("Fichier analysé avec succès !")
 
     st.subheader("📝 Option 2 : Saisie des postes comptables")
     
@@ -123,7 +105,7 @@ elif menu == "Nouveau Bilan Client":
         with cr1:
             ca = st.number_input("Chiffre d'Affaires HT", value=450000.0, step=5000.0)
             achats = st.number_input("Achats de marchandises & matières", value=120000.0, step=1000.0)
-            charges_ext = st.number_input("Autres charges externes (Loyer, Assurances...)", value=65000.0, step=1000.0)
+            charges_ext = st.number_input("Autres charges externes", value=65000.0, step=1000.0)
         with cr2:
             salaires = st.number_input("Salaires & Charges Sociales", value=180000.0, step=1000.0)
             dotations = st.number_input("Dotations aux amortissements", value=22000.0, step=1000.0)
@@ -140,7 +122,7 @@ elif menu == "Nouveau Bilan Client":
         with b2:
             st.caption("PASSIF (Ressources)")
             capitaux = st.number_input("Capitaux Propres", value=90000.0, step=1000.0)
-            dettes_fin = st.number_input("Dettes Financières (Emprunts)", value=65000.0, step=1000.0)
+            dettes_fin = st.number_input("Dettes Financières", value=65000.0, step=1000.0)
             dettes_fourn = st.number_input("Dettes Fournisseurs & Fiscales", value=28000.0, step=1000.0)
 
         submit = st.form_submit_button("⚡ Lancer les Calculs & Générer le Rapport PDF")
@@ -162,7 +144,6 @@ elif menu == "Nouveau Bilan Client":
         m3.metric("Fonds de Roulement (FRNG)", f"{(capitaux + dettes_fin) - immobilise:,.2f} €")
         m4.metric("Trésorerie Nette", f"{tresorerie:,.2f} €")
 
-        # Fonction de génération du PDF
         def build_pdf():
             buf = io.BytesIO()
             doc = SimpleDocTemplate(buf, pagesize=A4, rightMargin=30, leftMargin=30, topMargin=30, bottomMargin=30)
@@ -179,8 +160,7 @@ elif menu == "Nouveau Bilan Client":
             story.append(Paragraph(f"Exercice : {exercice} | SIRET : {siret}", style_txt))
             story.append(Spacer(1, 15))
 
-            # Table Compte de résultat
-            story.append(Paragraph("1. Compte de Résultat Synthetique", style_sec))
+            story.append(Paragraph("1. Compte de Résultat Synthétique", style_sec))
             data_cr = [
                 ["Poste Comptable", "Montant (€)"],
                 ["Chiffre d'Affaires HT", f"{ca:,.2f} €"],
@@ -204,7 +184,6 @@ elif menu == "Nouveau Bilan Client":
             story.append(t_cr)
             story.append(Spacer(1, 15))
 
-            # Table Bilan Actif Passif
             story.append(Paragraph("2. Bilan Actif / Passif", style_sec))
             data_b = [
                 ["ACTIF", "Montant (€)", "PASSIF", "Montant (€)"],
@@ -240,17 +219,12 @@ elif menu == "Nouveau Bilan Client":
             mime="application/pdf"
         )
 
-# ==============================================================================
-# PAGE 3 : HISTORIQUE & PARAMÈTRES
-# ==============================================================================
 elif menu == "Historique & Clients":
     st.title("📂 Base Clients & Historique")
-    st.write("Consultez les dossiers déjà traités.")
     st.table(pd.DataFrame(st.session_state["historique"]))
 
 elif menu == "Paramètres Cabinet":
     st.title("⚙️ Paramètres du Cabinet")
     st.text_input("Nom du Cabinet", "FiduConseil Expertise")
     st.text_input("Adresse", "15 Rue de la Paix, 75002 Paris")
-    st.file_uploader("Logo du Cabinet (Affiché sur les PDF générés)", type=["png", "jpg"])
     st.success("Configuration sauvegardée !")
