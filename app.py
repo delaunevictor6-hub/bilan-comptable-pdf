@@ -42,77 +42,134 @@ def init_supabase() -> Client:
 
 supabase = init_supabase()
 
-# --- GESTION DE LA SESSION UTILISATEUR ---
+# --- GESTION DES ÉTATS DE SESSION ---
 if "user" not in st.session_state:
     st.session_state["user"] = None
+if "otp_step" not in st.session_state:
+    st.session_state["otp_step"] = False
+if "pending_email" not in st.session_state:
+    st.session_state["pending_email"] = ""
+if "pending_nom_cabinet" not in st.session_state:
+    st.session_state["pending_nom_cabinet"] = ""
+if "is_signup" not in st.session_state:
+    st.session_state["is_signup"] = False
 
 # ==============================================================================
-# 1. ÉCRAN DE CONNEXION / INSCRIPTION
+# 1. AUTHENTIFICATION AVEC VÉRIFICATION E-MAIL PAR CODE OTP
 # ==============================================================================
 if st.session_state["user"] is None:
-    st.title("⚡ ComptaPro AI - Connexion Cabinet")
-    st.caption("Plateforme SaaS de génération et de gestion des bilans comptables")
+    st.title("⚡ ComptaPro AI - Espace Cabinet")
+    st.caption("Plateforme SaaS sécurisée de gestion et de génération de bilans comptables")
     
-    tab_login, tab_signup = st.tabs(["Se connecter", "Créer un compte cabinet"])
-    
-    with tab_login:
-        with st.form("login_form"):
-            email = st.text_input("Email professionnel")
-            password = st.text_input("Mot de passe", type="password")
-            btn_login = st.form_submit_button("Se connecter")
+    # Étape 2 : Saisie du code reçu par e-mail
+    if st.session_state["otp_step"]:
+        st.subheader("🔑 Vérification de votre identité")
+        st.info(f"Un code de vérification a été envoyé à : **{st.session_state['pending_email']}**")
+        
+        with st.form("verify_code_form"):
+            code_input = st.text_input("Entrez le code reçu par e-mail", placeholder="Ex: 123456")
+            btn_verify = st.form_submit_button("Valider et accéder à l'espace")
             
-            if btn_login:
-                try:
-                    res = supabase.auth.sign_in_with_password({"email": email, "password": password})
-                    st.session_state["user"] = res.user
-                    st.success("Connexion réussie !")
-                    st.rerun()
-                except Exception as e:
-                    st.error("Identifiants incorrects ou compte inexistant.")
+            if btn_verify:
+                if not code_input:
+                    st.warning("Veuillez saisir le code.")
+                else:
+                    try:
+                        res = supabase.auth.verify_otp({
+                            "email": st.session_state["pending_email"],
+                            "token": code_input.strip(),
+                            "type": "email"
+                        })
+                        
+                        if res.user:
+                            st.session_state["user"] = res.user
+                            user_id = res.user.id
+                            
+                            if st.session_state["is_signup"]:
+                                existing_cab = supabase.table("cabinets").select("*").eq("user_id", user_id).execute().data
+                                if not existing_cab:
+                                    supabase.table("cabinets").insert({
+                                        "user_id": user_id,
+                                        "nom_cabinet": st.session_state["pending_nom_cabinet"] or "Mon Cabinet",
+                                        "adresse": "À renseigner"
+                                    }).execute()
+                            
+                            st.session_state["otp_step"] = False
+                            st.session_state["is_signup"] = False
+                            st.success("Vérification réussie !")
+                            st.rerun()
+                        else:
+                            st.error("Échec de la vérification. Code invalide.")
+                    except Exception as e:
+                        st.error(f"Code invalide ou expiré : {e}")
+        
+        if st.button("← Changer d'adresse e-mail"):
+            st.session_state["otp_step"] = False
+            st.session_state["is_signup"] = False
+            st.rerun()
 
-    with tab_signup:
-        with st.form("signup_form"):
-            new_email = st.text_input("Email professionnel")
-            new_password = st.text_input("Mot de passe (6 car. min)", type="password")
-            nom_cabinet = st.text_input("Nom de votre Cabinet", "Mon Cabinet Expertise")
-            btn_signup = st.form_submit_button("Créer mon espace SaaS")
-            
-            if btn_signup:
-                try:
-                    res = supabase.auth.sign_up({"email": new_email, "password": new_password})
-                    user_id = res.user.id
-                    # Enregistrement des paramètres initiaux du cabinet
-                    supabase.table("cabinets").insert({
-                        "user_id": user_id,
-                        "nom_cabinet": nom_cabinet,
-                        "adresse": "À renseigner"
-                    }).execute()
-                    st.success("Compte créé ! Vous pouvez maintenant vous connecter.")
-                except Exception as e:
-                    st.error(f"Erreur lors de la création : {e}")
+    # Étape 1 : Demande d'envoi du code par mail
+    else:
+        tab_login, tab_signup = st.tabs(["Se connecter", "Créer un compte cabinet"])
+        
+        with tab_login:
+            with st.form("login_request_form"):
+                email = st.text_input("Adresse e-mail du cabinet")
+                btn_login = st.form_submit_button("Recevoir mon code de connexion")
+                
+                if btn_login:
+                    if "@" not in email:
+                        st.error("Veuillez entrer une adresse e-mail valide.")
+                    else:
+                        try:
+                            supabase.auth.sign_in_with_otp({"email": email})
+                            st.session_state["pending_email"] = email
+                            st.session_state["otp_step"] = True
+                            st.session_state["is_signup"] = False
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Erreur d'envoi du code : {e}")
+
+        with tab_signup:
+            with st.form("signup_request_form"):
+                new_email = st.text_input("Adresse e-mail professionnelle")
+                nom_cabinet = st.text_input("Nom de votre Cabinet", "Mon Cabinet Expertise")
+                btn_signup = st.form_submit_button("Créer mon espace & recevoir le code")
+                
+                if btn_signup:
+                    if "@" not in new_email:
+                        st.error("Veuillez entrer une adresse e-mail valide.")
+                    else:
+                        try:
+                            supabase.auth.sign_in_with_otp({"email": new_email})
+                            st.session_state["pending_email"] = new_email
+                            st.session_state["pending_nom_cabinet"] = nom_cabinet
+                            st.session_state["otp_step"] = True
+                            st.session_state["is_signup"] = True
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Erreur lors de l'inscription : {e}")
 
 # ==============================================================================
-# 2. ESPACE CLIENT CONNECTÉ (MULTI-CABINETS ISOLÉ)
+# 2. ESPACE CLIENT CONNECTÉ
 # ==============================================================================
 else:
     user_id = st.session_state["user"].id
 
-    # Récupérer les paramètres du cabinet connecté
     cab_info = supabase.table("cabinets").select("*").eq("user_id", user_id).execute().data
     nom_cabinet_actuel = cab_info[0]["nom_cabinet"] if cab_info else "Mon Cabinet"
 
-    # NAVIGATION SIDEBAR
     with st.sidebar:
         st.title("⚡ ComptaPro AI")
         st.caption(f"Cabinet connecté : **{nom_cabinet_actuel}**")
         if st.button("Déconnexion"):
             st.session_state["user"] = None
+            st.session_state["otp_step"] = False
             st.rerun()
         st.divider()
 
         menu = st.radio("Navigation", ["Dashboard", "Nouveau Bilan Client", "Mes Clients", "Paramètres Cabinet"])
 
-    # PAGE 1 : DASHBOARD
     if menu == "Dashboard":
         st.title(f"📈 Tableau de bord - {nom_cabinet_actuel}")
         bilans_data = supabase.table("bilans").select("*").eq("user_id", user_id).execute().data
@@ -130,10 +187,8 @@ else:
             col2.metric("Chiffre d'Affaires total géré", "0,00 €")
             st.info("Aucun bilan comptable n'a encore été généré.")
 
-    # PAGE 2 : NOUVEAU BILAN CLIENT
     elif menu == "Nouveau Bilan Client":
         st.title("📄 Édition d'un Bilan Comptable Client")
-        st.caption("Importez vos données ou renseignez le formulaire ci-dessous.")
 
         with st.form("form_bilan"):
             st.markdown("##### 1. Informations Générales Client")
@@ -172,7 +227,6 @@ else:
 
             btn_save = st.form_submit_button("⚡ Enregistrer le Bilan & Générer PDF")
 
-        # Calculs Financiers
         total_charges = achats + charges_ext + salaires + dotations + impots
         resultat_net = ca - total_charges
         ebe = ca - (achats + charges_ext + salaires)
@@ -180,7 +234,6 @@ else:
         total_passif = capitaux + dettes_fin + dettes_fourn + max(0, resultat_net)
 
         if btn_save:
-            # Enregistrement sécurisé Supabase
             supabase.table("bilans").insert({
                 "user_id": user_id,
                 "nom_client": nom_client,
@@ -189,17 +242,15 @@ else:
                 "resultat": resultat_net
             }).execute()
 
-            st.success(f"Bilan de {nom_client} sauvegardé avec succès dans votre espace cabinet !")
+            st.success(f"Bilan de {nom_client} sauvegardé !")
             st.divider()
 
-            # Métriques
             m1, m2, m3, m4 = st.columns(4)
             m1.metric("Résultat Net", f"{resultat_net:,.2f} €", delta=f"{(resultat_net/ca)*100:.1f}% CA")
             m2.metric("EBE (Excédent Brut)", f"{ebe:,.2f} €")
             m3.metric("FRNG", f"{(capitaux + dettes_fin) - immobilise:,.2f} €")
             m4.metric("Trésorerie Nette", f"{tresorerie:,.2f} €")
 
-            # Génération PDF
             def build_pdf():
                 buf = io.BytesIO()
                 doc = SimpleDocTemplate(buf, pagesize=A4, rightMargin=30, leftMargin=30, topMargin=30, bottomMargin=30)
@@ -216,7 +267,6 @@ else:
                 story.append(Paragraph(f"Exercice : {annee} | SIRET : {siret}", style_txt))
                 story.append(Spacer(1, 15))
 
-                # Compte de Résultat
                 story.append(Paragraph("1. Compte de Résultat Synthétique", style_sec))
                 data_cr = [
                     ["Poste Comptable", "Montant (€)"],
@@ -241,7 +291,6 @@ else:
                 story.append(t_cr)
                 story.append(Spacer(1, 15))
 
-                # Bilan Actif / Passif
                 story.append(Paragraph("2. Bilan Actif / Passif", style_sec))
                 data_b = [
                     ["ACTIF", "Montant (€)", "PASSIF", "Montant (€)"],
@@ -277,7 +326,6 @@ else:
                 mime="application/pdf"
             )
 
-    # PAGE 3 : MES CLIENTS
     elif menu == "Mes Clients":
         st.title("📂 Base de données Clients")
         bilans_data = supabase.table("bilans").select("*").eq("user_id", user_id).execute().data
@@ -287,11 +335,10 @@ else:
         else:
             st.info("Aucun client n'est encore associé à votre cabinet.")
 
-    # PAGE 4 : PARAMÈTRES
     elif menu == "Paramètres Cabinet":
         st.title("⚙️ Configuration du Cabinet")
         nouveau_nom = st.text_input("Nom du Cabinet", value=nom_cabinet_actuel)
         if st.button("Sauvegarder les modifications"):
             supabase.table("cabinets").update({"nom_cabinet": nouveau_nom}).eq("user_id", user_id).execute()
-            st.success("Nom du cabinet mis à jour avec succès !")
+            st.success("Nom du cabinet mis à jour !")
             st.rerun()
