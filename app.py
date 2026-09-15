@@ -55,16 +55,16 @@ if "is_signup" not in st.session_state:
     st.session_state["is_signup"] = False
 
 # ==============================================================================
-# 1. AUTHENTIFICATION AVEC VÉRIFICATION E-MAIL PAR CODE OTP
+# 1. AUTHENTIFICATION : EMAIL + MOT DE PASSE + CODE VERIFICATION EMAIL
 # ==============================================================================
 if st.session_state["user"] is None:
-    st.title("⚡ ComptaPro AI - Espace Cabinet")
+    st.title("⚡ ComptaPro AI - Connexion Cabinet")
     st.caption("Plateforme SaaS sécurisée de gestion et de génération de bilans comptables")
     
     # Étape 2 : Saisie du code reçu par e-mail
     if st.session_state["otp_step"]:
-        st.subheader("🔑 Vérification de votre identité")
-        st.info(f"Un code de vérification a été envoyé à : **{st.session_state['pending_email']}**")
+        st.subheader("🔑 Étape 2 : Vérification par code e-mail")
+        st.info(f"Un code de vérification temporaire a été envoyé à : **{st.session_state['pending_email']}**")
         
         with st.form("verify_code_form"):
             code_input = st.text_input("Entrez le code reçu par e-mail", placeholder="Ex: 123456")
@@ -103,44 +103,54 @@ if st.session_state["user"] is None:
                     except Exception as e:
                         st.error(f"Code invalide ou expiré : {e}")
         
-        if st.button("← Changer d'adresse e-mail"):
+        if st.button("← Revenir au formulaire"):
             st.session_state["otp_step"] = False
             st.session_state["is_signup"] = False
             st.rerun()
 
-    # Étape 1 : Demande d'envoi du code par mail
+    # Étape 1 : Email + Mot de passe
     else:
         tab_login, tab_signup = st.tabs(["Se connecter", "Créer un compte cabinet"])
         
         with tab_login:
             with st.form("login_request_form"):
                 email = st.text_input("Adresse e-mail du cabinet")
-                btn_login = st.form_submit_button("Recevoir mon code de connexion")
+                password = st.text_input("Mot de passe", type="password")
+                btn_login = st.form_submit_button("Se connecter & Recevoir le code par mail")
                 
                 if btn_login:
-                    if "@" not in email:
-                        st.error("Veuillez entrer une adresse e-mail valide.")
+                    if "@" not in email or not password:
+                        st.error("Veuillez renseigner votre e-mail et votre mot de passe.")
                     else:
                         try:
+                            # 1. Vérification email/mot de passe
+                            res = supabase.auth.sign_in_with_password({"email": email, "password": password})
+                            
+                            # 2. Si les identifiants sont bons, envoi du code par mail
                             supabase.auth.sign_in_with_otp({"email": email})
                             st.session_state["pending_email"] = email
                             st.session_state["otp_step"] = True
                             st.session_state["is_signup"] = False
                             st.rerun()
                         except Exception as e:
-                            st.error(f"Erreur d'envoi du code : {e}")
+                            st.error("Email ou mot de passe incorrect.")
 
         with tab_signup:
             with st.form("signup_request_form"):
                 new_email = st.text_input("Adresse e-mail professionnelle")
+                new_password = st.text_input("Choisissez un mot de passe (6 car. min)", type="password")
                 nom_cabinet = st.text_input("Nom de votre Cabinet", "Mon Cabinet Expertise")
-                btn_signup = st.form_submit_button("Créer mon espace & recevoir le code")
+                btn_signup = st.form_submit_button("Créer mon compte & Recevoir le code")
                 
                 if btn_signup:
-                    if "@" not in new_email:
-                        st.error("Veuillez entrer une adresse e-mail valide.")
+                    if "@" not in new_email or len(new_password) < 6:
+                        st.error("Veuillez saisir un email valide et un mot de passe d'au moins 6 caractères.")
                     else:
                         try:
+                            # 1. Inscription avec mot de passe
+                            res = supabase.auth.sign_up({"email": new_email, "password": new_password})
+                            
+                            # 2. Envoi du code par mail
                             supabase.auth.sign_in_with_otp({"email": new_email})
                             st.session_state["pending_email"] = new_email
                             st.session_state["pending_nom_cabinet"] = nom_cabinet
