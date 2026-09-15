@@ -8,9 +8,31 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, Tabl
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 
 # --- CONFIGURATION STREAMLIT ---
-st.set_page_config(page_title="ComptaPro SaaS", page_icon="⚡", layout="wide")
+st.set_page_config(
+    page_title="ComptaPro SaaS - Plateforme Expert-Comptable",
+    page_icon="⚡",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
-# --- CONNEXION SUPABASE (Lignes 16 et 17 configurées) ---
+# --- STYLE CSS ---
+st.markdown("""
+<style>
+    .main { background-color: #F8FAFC; }
+    .stButton>button {
+        background-color: #2563EB;
+        color: white;
+        border-radius: 8px;
+        font-weight: 600;
+        padding: 0.5rem 1rem;
+        border: none;
+        width: 100%;
+    }
+    .stButton>button:hover { background-color: #1D4ED8; color: white; }
+</style>
+""", unsafe_allow_html=True)
+
+# --- CONNEXION SUPABASE ---
 SUPABASE_URL = "https://pttlfcwuqjyverbsvzzb.supabase.co"
 SUPABASE_KEY = "sb_publishable_VjrsGDL0MB5J6OmqLQAq_QbgJir"
 
@@ -29,6 +51,7 @@ if "user" not in st.session_state:
 # ==============================================================================
 if st.session_state["user"] is None:
     st.title("⚡ ComptaPro AI - Connexion Cabinet")
+    st.caption("Plateforme SaaS de génération et de gestion des bilans comptables")
     
     tab_login, tab_signup = st.tabs(["Se connecter", "Créer un compte cabinet"])
     
@@ -81,15 +104,15 @@ else:
     # NAVIGATION SIDEBAR
     with st.sidebar:
         st.title("⚡ ComptaPro AI")
-        st.caption(f"Connecté : **{nom_cabinet_actuel}**")
+        st.caption(f"Cabinet connecté : **{nom_cabinet_actuel}**")
         if st.button("Déconnexion"):
             st.session_state["user"] = None
             st.rerun()
         st.divider()
 
-        menu = st.radio("Navigation", ["Dashboard", "Nouveau Bilan", "Mes Clients", "Paramètres Cabinet"])
+        menu = st.radio("Navigation", ["Dashboard", "Nouveau Bilan Client", "Mes Clients", "Paramètres Cabinet"])
 
-    # PAGE : DASHBOARD
+    # PAGE 1 : DASHBOARD
     if menu == "Dashboard":
         st.title(f"📈 Tableau de bord - {nom_cabinet_actuel}")
         bilans_data = supabase.table("bilans").select("*").eq("user_id", user_id).execute().data
@@ -103,44 +126,172 @@ else:
             st.divider()
             st.subheader("Historique de vos dossiers")
             st.dataframe(df[["nom_client", "annee", "ca", "resultat"]], use_container_width=True)
+        else:
+            col2.metric("Chiffre d'Affaires total géré", "0,00 €")
+            st.info("Aucun bilan comptable n'a encore été généré.")
 
-    # PAGE : NOUVEAU BILAN
-    elif menu == "Nouveau Bilan":
-        st.title("📄 Édition d'un Bilan Client")
-        
+    # PAGE 2 : NOUVEAU BILAN CLIENT
+    elif menu == "Nouveau Bilan Client":
+        st.title("📄 Édition d'un Bilan Comptable Client")
+        st.caption("Importez vos données ou renseignez le formulaire ci-dessous.")
+
         with st.form("form_bilan"):
-            nom_client = st.text_input("Nom du Client / Raison Sociale")
-            annee = st.text_input("Exercice", "2025")
-            ca = st.number_input("Chiffre d'Affaires HT (€)", value=100000.0)
-            charges = st.number_input("Total des Charges (€)", value=70000.0)
-            btn_save = st.form_submit_button("Enregistrer le Bilan & Générer PDF")
+            st.markdown("##### 1. Informations Générales Client")
+            c1, c2, c3 = st.columns(3)
+            with c1:
+                nom_client = st.text_input("Raison Sociale / Client", "SARL Transports Express")
+            with c2:
+                annee = st.text_input("Exercice Comptable", "2025")
+            with c3:
+                siret = st.text_input("Numéro SIRET", "849 302 192 00012")
+
+            st.markdown("##### 2. Compte de Résultat Simplifié (€)")
+            cr1, cr2 = st.columns(2)
+            with cr1:
+                ca = st.number_input("Chiffre d'Affaires HT", value=450000.0, step=5000.0)
+                achats = st.number_input("Achats de marchandises & matières", value=120000.0, step=1000.0)
+                charges_ext = st.number_input("Autres charges externes", value=65000.0, step=1000.0)
+            with cr2:
+                salaires = st.number_input("Salaires & Charges Sociales", value=180000.0, step=1000.0)
+                dotations = st.number_input("Dotations aux amortissements", value=22000.0, step=1000.0)
+                impots = st.number_input("Impôts & Taxes", value=11000.0, step=1000.0)
+
+            st.markdown("##### 3. Bilan Actif / Passif (€)")
+            b1, b2 = st.columns(2)
+            with b1:
+                st.caption("ACTIF (Emplois)")
+                immobilise = st.number_input("Actif Immobilisé", value=110000.0, step=1000.0)
+                stocks = st.number_input("Stocks & En-cours", value=25000.0, step=1000.0)
+                creances = st.number_input("Créances Clients", value=48000.0, step=1000.0)
+                tresorerie = st.number_input("Disponibilités / Trésorerie", value=52000.0, step=1000.0)
+            with b2:
+                st.caption("PASSIF (Ressources)")
+                capitaux = st.number_input("Capitaux Propres", value=90000.0, step=1000.0)
+                dettes_fin = st.number_input("Dettes Financières", value=65000.0, step=1000.0)
+                dettes_fourn = st.number_input("Dettes Fournisseurs & Fiscales", value=28000.0, step=1000.0)
+
+            btn_save = st.form_submit_button("⚡ Enregistrer le Bilan & Générer PDF")
+
+        # Calculs Financiers
+        total_charges = achats + charges_ext + salaires + dotations + impots
+        resultat_net = ca - total_charges
+        ebe = ca - (achats + charges_ext + salaires)
+        total_actif = immobilise + stocks + creances + tresorerie
+        total_passif = capitaux + dettes_fin + dettes_fourn + max(0, resultat_net)
 
         if btn_save:
-            resultat = ca - charges
-            # Sauvegarde isolée en BDD avec le user_id du cabinet connecté
+            # Enregistrement sécurisé Supabase
             supabase.table("bilans").insert({
                 "user_id": user_id,
                 "nom_client": nom_client,
                 "annee": annee,
                 "ca": ca,
-                "resultat": resultat
+                "resultat": resultat_net
             }).execute()
-            st.success(f"Bilan de {nom_client} sauvegardé dans votre espace cabinet !")
 
-    # PAGE : MES CLIENTS
+            st.success(f"Bilan de {nom_client} sauvegardé avec succès dans votre espace cabinet !")
+            st.divider()
+
+            # Métriques
+            m1, m2, m3, m4 = st.columns(4)
+            m1.metric("Résultat Net", f"{resultat_net:,.2f} €", delta=f"{(resultat_net/ca)*100:.1f}% CA")
+            m2.metric("EBE (Excédent Brut)", f"{ebe:,.2f} €")
+            m3.metric("FRNG", f"{(capitaux + dettes_fin) - immobilise:,.2f} €")
+            m4.metric("Trésorerie Nette", f"{tresorerie:,.2f} €")
+
+            # Génération PDF
+            def build_pdf():
+                buf = io.BytesIO()
+                doc = SimpleDocTemplate(buf, pagesize=A4, rightMargin=30, leftMargin=30, topMargin=30, bottomMargin=30)
+                styles = getSampleStyleSheet()
+
+                style_title = ParagraphStyle('Titre', parent=styles['Heading1'], fontName='Helvetica-Bold', fontSize=18, textColor=colors.HexColor('#0F172A'))
+                style_sec = ParagraphStyle('Sec', parent=styles['Heading2'], fontName='Helvetica-Bold', fontSize=12, textColor=colors.HexColor('#2563EB'), spaceBefore=10, spaceAfter=8)
+                style_txt = ParagraphStyle('Txt', parent=styles['Normal'], fontName='Helvetica', fontSize=9, leading=12)
+
+                story = []
+                story.append(Paragraph(f"<b>{nom_cabinet_actuel}</b> - Rapport Financier Client", style_txt))
+                story.append(Spacer(1, 5))
+                story.append(Paragraph(f"Bilan & Compte de Résultat : {nom_client}", style_title))
+                story.append(Paragraph(f"Exercice : {annee} | SIRET : {siret}", style_txt))
+                story.append(Spacer(1, 15))
+
+                # Compte de Résultat
+                story.append(Paragraph("1. Compte de Résultat Synthétique", style_sec))
+                data_cr = [
+                    ["Poste Comptable", "Montant (€)"],
+                    ["Chiffre d'Affaires HT", f"{ca:,.2f} €"],
+                    ["Consommation Marchandises & Charges Externes", f"- {(achats + charges_ext):,.2f} €"],
+                    ["Salaires & Charges Sociales", f"- {salaires:,.2f} €"],
+                    ["Excédent Brut d'Exploitation (EBE)", f"{ebe:,.2f} €"],
+                    ["Amortissements & Impôts", f"- {(dotations + impots):,.2f} €"],
+                    ["RÉSULTAT NET COMPTABLE", f"{resultat_net:,.2f} €"]
+                ]
+                t_cr = Table(data_cr, colWidths=[310, 220])
+                t_cr.setStyle(TableStyle([
+                    ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#1E293B')),
+                    ('TEXTCOLOR', (0,0), (-1,0), colors.white),
+                    ('ALIGN', (1,0), (1,-1), 'RIGHT'),
+                    ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+                    ('FONTNAME', (0,-1), (-1,-1), 'Helvetica-Bold'),
+                    ('BACKGROUND', (0,-1), (-1,-1), colors.HexColor('#DCFCE7') if resultat_net >= 0 else colors.HexColor('#FEE2E2')),
+                    ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#E2E8F0')),
+                    ('PADDING', (0,0), (-1,-1), 6),
+                ]))
+                story.append(t_cr)
+                story.append(Spacer(1, 15))
+
+                # Bilan Actif / Passif
+                story.append(Paragraph("2. Bilan Actif / Passif", style_sec))
+                data_b = [
+                    ["ACTIF", "Montant (€)", "PASSIF", "Montant (€)"],
+                    ["Actif Immobilisé", f"{immobilise:,.2f} €", "Capitaux Propres", f"{capitaux:,.2f} €"],
+                    ["Stocks", f"{stocks:,.2f} €", "Résultat Net", f"{resultat_net:,.2f} €"],
+                    ["Créances Clients", f"{creances:,.2f} €", "Dettes Financières", f"{dettes_fin:,.2f} €"],
+                    ["Trésorerie", f"{tresorerie:,.2f} €", "Dettes Fournisseurs", f"{dettes_fourn:,.2f} €"],
+                    ["TOTAL ACTIF", f"{total_actif:,.2f} €", "TOTAL PASSIF", f"{total_passif:,.2f} €"]
+                ]
+                t_b = Table(data_b, colWidths=[160, 105, 160, 105])
+                t_b.setStyle(TableStyle([
+                    ('BACKGROUND', (0,0), (1,0), colors.HexColor('#2563EB')),
+                    ('BACKGROUND', (2,0), (3,0), colors.HexColor('#1D4ED8')),
+                    ('TEXTCOLOR', (0,0), (-1,0), colors.white),
+                    ('ALIGN', (1,0), (1,-1), 'RIGHT'),
+                    ('ALIGN', (3,0), (3,-1), 'RIGHT'),
+                    ('FONTNAME', (0,0), (-1,0), 'Helvetica-Bold'),
+                    ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#E2E8F0')),
+                    ('PADDING', (0,0), (-1,-1), 5),
+                ]))
+                story.append(t_b)
+
+                doc.build(story)
+                buf.seek(0)
+                return buf
+
+            pdf_bytes = build_pdf()
+
+            st.download_button(
+                label="📥 Télécharger le Rapport Officiel (PDF)",
+                data=pdf_bytes,
+                file_name=f"Bilan_{nom_client.replace(' ', '_')}_{annee}.pdf",
+                mime="application/pdf"
+            )
+
+    # PAGE 3 : MES CLIENTS
     elif menu == "Mes Clients":
-        st.title("📂 Liste de vos clients")
+        st.title("📂 Base de données Clients")
         bilans_data = supabase.table("bilans").select("*").eq("user_id", user_id).execute().data
         if bilans_data:
-            st.dataframe(pd.DataFrame(bilans_data), use_container_width=True)
+            df = pd.DataFrame(bilans_data)
+            st.dataframe(df, use_container_width=True)
         else:
-            st.info("Aucun bilan enregistré pour le moment.")
+            st.info("Aucun client n'est encore associé à votre cabinet.")
 
-    # PAGE : PARAMÈTRES
+    # PAGE 4 : PARAMÈTRES
     elif menu == "Paramètres Cabinet":
-        st.title("⚙️ Configuration de votre Cabinet")
+        st.title("⚙️ Configuration du Cabinet")
         nouveau_nom = st.text_input("Nom du Cabinet", value=nom_cabinet_actuel)
-        if st.button("Mettre à jour"):
+        if st.button("Sauvegarder les modifications"):
             supabase.table("cabinets").update({"nom_cabinet": nouveau_nom}).eq("user_id", user_id).execute()
-            st.success("Paramètres mis à jour !")
+            st.success("Nom du cabinet mis à jour avec succès !")
             st.rerun()
